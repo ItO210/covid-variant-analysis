@@ -17,13 +17,6 @@ This project was developed in **October 2022**.
 
 <img width="779" alt="Screenshot 2025-03-23 at 4 14 16 p m" src="https://github.com/user-attachments/assets/a3e90bb2-26ea-4229-9313-89a0d9a93315" />
 
-## Usage
+## Report Generation
 
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/ItO210/covid-variant-analysis.git
-
-2. Install the required R packages
-
-3. Run the script `analysis.rmd`
+The analysis.pdf file is the final report generated from analysis.rmd using R Markdown. The .rmd file contains the code and methodology used for the analysis, which can be re-run or modified to generate updated results.
