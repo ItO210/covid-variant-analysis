@@ -1,0 +1,365 @@
+---
+title: "Análisis de biología computacional"
+author: 'Juan Pablo Sebastián Escobar Juárez, Carol Jatziry Rendon Guerrero, Carlos Ito Miyasaki'
+subtitle: Situacion problema
+output:
+  pdf_document: default
+  html_document: 
+    theme: spacelab
+    toc: yes
+    highlight: textmate
+---
+# Propuesta
+
+Hacer una comparación entre tres variantes del Virus SARS-CoV-2: la variante original, una variante de hace uno o dos años, y una variante reciente.
+
+En base a las comparaciones, analizar que porcentaje del virus ha cambiado e identificar las mutaciones de nucleótido único entre las secuencias de las mismas.
+
+La finalidad de este análisis es ver que tanto ha cambiado el virus con el tiempo, basándonos en la cantidad de mutaciones.
+
+El SARS-COV-2 sera tomado como la variante original, y se basaran los resultados en las graficas dadas por:
+
+"https://ourworldindata.org/grapher/covid-variants-bar"
+
+Se decidio utilizar la variante Delta (B.1.617.2, VBM, DELTA) ya que fue la variante predominante en 2021 y la variante Omicron (BA.5, VOC, OMICRON) que ha sido una de interes recientemente.
+
+# Hipotesis
+
+Creemos que la variante más reciente del COVID-19, Omicron, tendra un mayor número de mutaciones únicas en comparación con la variante Delta, ya que Omicron ha surgido más recientemente y ha tenido menos tiempo para evolucionar.
+Entre mas tiempo pasa, esperamos ver una mayor cantidad de mutaciones relevantes esperamos ver en las variantes.
+
+## Análisis de la varaiante reciente (DELTA)
+
+```{R}
+cat("\14")
+
+trad =    c(UUU="F", UUC="F", UUA="L", UUG="L",
+            UCU="S", UCC="S", UCA="S", UCG="S",
+            UAU="Y", UAC="Y", UAA="STOP", UAG="STOP",
+            UGU="C", UGC="C", UGA="STOP", UGG="W",
+            CUU="L", CUC="L", CUA="L", CUG="L",
+            CCU="P", CCC="P", CCA="P", CCG="P",
+            CAU="H", CAC="H", CAA="Q", CAG="Q",
+            CGU="R", CGC="R", CGA="R", CGG="R",
+            AUU="I", AUC="I", AUA="I", AUG="M",
+            ACU="T", ACC="T", ACA="T", ACG="T",
+            AAU="N", AAC="N", AAA="K", AAG="K",
+            AGU="S", AGC="S", AGA="R", AGG="R",
+            GUU="V", GUC="V", GUA="V", GUG="V",
+            GCU="A", GCC="A", GCA="A", GCG="A",
+            GAU="D", GAC="D", GAA="E", GAG="E",
+            GGU="G", GGC="G", GGA="G", GGG="G")
+
+library(seqinr)
+```
+
+## Importamos la secuencia de referencia, y 200 secuencias de la variante.
+```{R}
+original = read.fasta("original.txt")
+mexa = read.fasta("delta200.fasta")
+```
+
+## Definimos el dataframe
+```{R}
+df = data.frame(
+  Mutation = character(),
+  Nucleotide = numeric(),
+  Codon = character(),
+  Protein = character(),
+  Gene = character(),
+  Sequ = character(),
+  LongSequ= numeric()
+)
+```
+
+## Encontramos las mutaciones, utilizando el open reading frame buscamos las diferencias.
+```{R}
+for (g in seq(1,length(original))){
+  if (g==2 ) next
+  anotaciones = attr(original[[g]], "Annot") 
+  atributos = unlist(strsplit(anotaciones,"\\[|\\]|:|=|\\.|\\(")); 
+  geneName = atributos[which(atributos=="gene")+1] 
+  if (length(which(atributos=="join"))>0) inicioGen = as.integer(atributos[which(atributos=="join")+1]) 
+  else inicioGen = as.integer(atributos[which(atributos=="location")+1]) 
+  cat ("------ gene:", geneName, "inicioGen:",inicioGen,"\n")
+  arnOri = as.vector(original[[g]])
+  arnOri[arnOri=="t"] = "u"
+  arnOri = toupper(arnOri)
+
+  for (k in seq(g,length(mexa),12)){
+    a= names(mexa)[k]
+    b= length(mexa[[k]])
+    arnMexa = as.vector(mexa[[k]])
+    arnMexa[arnMexa=="t"] = "u"
+    arnMexa = toupper(arnMexa)
+    if (length(arnOri) != length(arnMexa)) next
+    dif = which(arnOri != arnMexa) 
+    for (x in dif){
+      muta = paste(arnOri[x],"to",arnMexa[x], sep="") 
+      inicioCodon = x - (x-1)%%3 
+      posGlobal = inicioCodon + inicioGen
+      numCodon = as.integer((x-1)/3+1) 
+      codonOri = paste(arnOri[inicioCodon], arnOri[inicioCodon+1], arnOri[inicioCodon+2],sep="")
+      codonMex = paste(arnMexa[inicioCodon], arnMexa[inicioCodon+1], arnMexa[inicioCodon+2],sep="")
+      codonChange = paste(codonOri,"to",codonMex, sep="")
+      aminoChange = paste(trad[codonOri],numCodon,trad[codonMex], sep="")
+      if (!is.na(trad[codonMex])){
+        newRow = list(muta, posGlobal, codonChange, aminoChange, geneName, a, b)
+        df[nrow(df)+1, ] = newRow
+      }
+    }
+  }
+}
+nrow(df)
+head(df)
+nrow(df)
+```
+
+## Filtramos los datos.
+```{R}
+library(dplyr)
+dfgraph = filter(
+  summarise(
+    select(
+      group_by(df, Protein),
+      Mutation:Gene
+    ),
+    Mutation = first(Mutation),
+    Codon = first(Codon),
+    Gene = first(Gene),
+    Cuenta = n()
+  ),
+  Cuenta>20
+)
+
+df2graph = filter(
+  summarise(
+    select(
+      group_by(df, Sequ),
+      Mutation:LongSequ
+    ),
+    LongSequ = first(LongSequ),
+    Nmuta = n()
+  ),
+  Nmuta>15
+)
+df2graph <- cbind(df2graph, Ncodones=c((df2graph$LongSequ-df2graph$LongSequ%%3)/3  +1))
+df2graph <- cbind(df2graph, Porcentaje=c(100 - df2graph$Nmuta*100/df2graph$Ncodones))
+
+head(dfgraph)
+nrow(dfgraph)
+str(dfgraph)
+dfgraph = as.data.frame(dfgraph)
+df2graph = as.data.frame(df2graph)
+str(df2graph)
+```
+
+# Resultados
+
+## Grafica 1
+```{R}
+library(ggplot2)
+p = ggplot(dfgraph)
+p = p + aes(x=Protein, y=Cuenta, fill=Protein, label=Cuenta)
+p = p + ggtitle("Frecuencia de mutaciones de sustitución en B.1.617.2, VBM, DELTA")
+p = p + labs(x="Mutación", y="Frecuencia", fill="Mutación")
+p = p + geom_bar(stat = "identity")
+p = p + geom_text(stat = "identity", vjust=0)
+p = p + theme_bw()
+p = p + facet_grid(~Gene,scales="free", space="free_x")
+print(p)
+```
+
+## Grafica 2
+```{R}
+m= ggplot(data= df2graph,
+       mapping= aes(x= Porcentaje, fill= "red")) +
+         geom_histogram(bins=10, alpha=1) +
+        labs(tittle= 'Frecuencias de porcentajes de mutaciones por secuencia',
+             fill='frecuencias',
+             y='frecuencias')
+print(m)
+```
+
+## Grafica 3
+```{R}
+q = ggplot(df2graph)
+q = q + aes(x=Sequ, y=Nmuta, fill=Sequ, label=Nmuta)
+q = q + ggtitle("Frecuencia de mutaciones de sustitución en B.1.617.2, VBM, DELTA")
+q = q + labs(x="Mutaciones por secuencia", y="Frecuencia", fill="Mutación")
+q = q + geom_bar(stat = "identity")
+q = q + geom_text(stat = "identity", vjust=0)
+q = q + theme_bw()
+print(q)
+```
+
+## Analisis de la varaiante de hace años (OMICRON)
+
+```{R}
+cat("\14")
+
+trad =    c(UUU="F", UUC="F", UUA="L", UUG="L",
+            UCU="S", UCC="S", UCA="S", UCG="S",
+            UAU="Y", UAC="Y", UAA="STOP", UAG="STOP",
+            UGU="C", UGC="C", UGA="STOP", UGG="W",
+            CUU="L", CUC="L", CUA="L", CUG="L",
+            CCU="P", CCC="P", CCA="P", CCG="P",
+            CAU="H", CAC="H", CAA="Q", CAG="Q",
+            CGU="R", CGC="R", CGA="R", CGG="R",
+            AUU="I", AUC="I", AUA="I", AUG="M",
+            ACU="T", ACC="T", ACA="T", ACG="T",
+            AAU="N", AAC="N", AAA="K", AAG="K",
+            AGU="S", AGC="S", AGA="R", AGG="R",
+            GUU="V", GUC="V", GUA="V", GUG="V",
+            GCU="A", GCC="A", GCA="A", GCG="A",
+            GAU="D", GAC="D", GAA="E", GAG="E",
+            GGU="G", GGC="G", GGA="G", GGG="G")
+
+library(seqinr)
+```
+
+## Importamos la secuencia de referencia, y 200 secuencias de la variante.
+```{R}
+original = read.fasta("original.txt")
+mexa = read.fasta("omicron200.fasta")
+```
+
+## Definimos el dataframe
+```{R}
+df = data.frame(
+  Mutation = character(),
+  Nucleotide = numeric(),
+  Codon = character(),
+  Protein = character(),
+  Gene = character(),
+  Sequ = character(),
+  LongSequ= numeric()
+)
+```
+
+## Encontramos las mutaciones, utilizando el open reading frame buscamos las diferencias.
+```{R}
+for (g in seq(1,length(original))){
+  if (g==2 ) next
+  anotaciones = attr(original[[g]], "Annot") 
+  atributos = unlist(strsplit(anotaciones,"\\[|\\]|:|=|\\.|\\(")); 
+  geneName = atributos[which(atributos=="gene")+1] 
+  if (length(which(atributos=="join"))>0) inicioGen = as.integer(atributos[which(atributos=="join")+1]) 
+  else inicioGen = as.integer(atributos[which(atributos=="location")+1]) 
+  cat ("------ gene:", geneName, "inicioGen:",inicioGen,"\n")
+  arnOri = as.vector(original[[g]])
+  arnOri[arnOri=="t"] = "u"
+  arnOri = toupper(arnOri)
+
+  for (k in seq(g,length(mexa),12)){
+    a= names(mexa)[k]
+    b= length(mexa[[k]])
+    arnMexa = as.vector(mexa[[k]])
+    arnMexa[arnMexa=="t"] = "u"
+    arnMexa = toupper(arnMexa)
+    if (length(arnOri) != length(arnMexa)) next
+    dif = which(arnOri != arnMexa) 
+    for (x in dif){
+      muta = paste(arnOri[x],"to",arnMexa[x], sep="") 
+      inicioCodon = x - (x-1)%%3 
+      posGlobal = inicioCodon + inicioGen
+      numCodon = as.integer((x-1)/3+1) 
+      codonOri = paste(arnOri[inicioCodon], arnOri[inicioCodon+1], arnOri[inicioCodon+2],sep="")
+      codonMex = paste(arnMexa[inicioCodon], arnMexa[inicioCodon+1], arnMexa[inicioCodon+2],sep="")
+      codonChange = paste(codonOri,"to",codonMex, sep="")
+      aminoChange = paste(trad[codonOri],numCodon,trad[codonMex], sep="")
+      if (!is.na(trad[codonMex])){
+        newRow = list(muta, posGlobal, codonChange, aminoChange, geneName, a, b)
+        df[nrow(df)+1, ] = newRow
+      }
+    }
+  }
+}
+nrow(df)
+head(df)
+nrow(df)
+```
+
+## Filtramos los datos.
+```{R}
+library(dplyr)
+dfgraph = filter(
+  summarise(
+    select(
+      group_by(df, Protein),
+      Mutation:Gene
+    ),
+    Mutation = first(Mutation),
+    Codon = first(Codon),
+    Gene = first(Gene),
+    Cuenta = n()
+  ),
+  Cuenta>20
+)
+
+df2graph = filter(
+  summarise(
+    select(
+      group_by(df, Sequ),
+      Mutation:LongSequ
+    ),
+    LongSequ = first(LongSequ),
+    Nmuta = n()
+  ),
+  Nmuta>15
+)
+df2graph <- cbind(df2graph, Ncodones=c((df2graph$LongSequ-df2graph$LongSequ%%3)/3  +1))
+df2graph <- cbind(df2graph, Porcentaje=c(100 - df2graph$Nmuta*100/df2graph$Ncodones))
+
+head(dfgraph)
+nrow(dfgraph)
+str(dfgraph)
+dfgraph = as.data.frame(dfgraph)
+df2graph = as.data.frame(df2graph)
+str(df2graph)
+```
+
+# Resultados
+
+## Grafica 1
+```{R}
+library(ggplot2)
+p = ggplot(dfgraph)
+p = p + aes(x=Protein, y=Cuenta, fill=Protein, label=Cuenta)
+p = p + ggtitle("Frecuencia de mutaciones de sustitución en BA.5, VOC, OMICRON")
+p = p + labs(x="Mutación", y="Frecuencia", fill="Mutación")
+p = p + geom_bar(stat = "identity")
+p = p + geom_text(stat = "identity", vjust=0)
+p = p + theme_bw()
+p = p + facet_grid(~Gene,scales="free", space="free_x")
+print(p)
+```
+
+## Grafica 2
+```{R}
+m= ggplot(data= df2graph,
+       mapping= aes(x= Porcentaje, fill= "red")) +
+         geom_histogram(bins=10, alpha=1) +
+        labs(tittle= 'Frecuencias de porcentajes de mutaciones por secuencia',
+             fill='frecuencias',
+             y='frecuencias')
+print(m)
+```
+
+## Grafica 3
+```{R}
+q = ggplot(df2graph)
+q = q + aes(x=Sequ, y=Nmuta, fill=Sequ, label=Nmuta)
+q = q + ggtitle("Frecuencia de mutaciones de sustitución en BA.5, VOC, OMICRON")
+q = q + labs(x="Mutaciones por secuencia", y="Frecuencia", fill="Mutación")
+q = q + geom_bar(stat = "identity")
+q = q + geom_text(stat = "identity", vjust=0)
+q = q + theme_bw()
+print(q)
+```
+
+# Conclusion
+
+Basandonos en los resultados obtenidos, podemos concluir que la cantidad de mutaciones encontradas en las variantes Delta y Omicron no difiere significativamente. 
+La variante Omicron no parece tener muchas más mutaciones relevantes que la variante Delta, a pesar de ser más reciente. 
+Creemos que esto puede ser relevante para la comprensión de la evolución del virus y su capacidad de propagación y transmisión.
